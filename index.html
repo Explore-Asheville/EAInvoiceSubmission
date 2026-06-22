@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Invoice Submission, Explore Asheville</title>
+<style>
+  :root{
+    --navy:#1B4F7A; --navy-deep:#143A5A; --gold:#E8A020; --ink:#2b3640; --muted:#6b7884;
+    --line:#d9dee3; --line-strong:#c2cad2; --paper:#ffffff; --req:#c0392b; --ok:#1d7a4d; --err:#b4452f;
+    --field-bg:#fff; --focus:rgba(27,79,122,.16);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#f5f6f7;color:var(--ink);
+    font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial;padding:34px 16px 80px}
+  .sheet{max-width:640px;margin:0 auto;background:var(--paper);border:1px solid var(--line);border-radius:10px;
+    box-shadow:0 1px 3px rgba(20,40,60,.05),0 12px 30px rgba(20,40,60,.06);overflow:hidden}
+  .topbar{height:6px;background:linear-gradient(90deg,var(--navy),var(--gold))}
+  .inner{padding:30px 34px 30px}
+  h1{font:600 23px/1.25 Georgia,"Times New Roman",serif;color:var(--navy);margin:4px 0 4px}
+  .lede{color:var(--muted);font-size:13.5px;margin:0 0 24px}
+  .q{margin-bottom:20px}
+  .q>label{display:block;font-weight:600;font-size:14px;color:#33404b;margin-bottom:7px}
+  .q .req{color:var(--req);margin-left:2px}
+  .selectwrap{position:relative}
+  select,input[type=text],textarea{width:100%;font:15px/1.4 ui-sans-serif,system-ui;color:var(--ink);
+    background:var(--field-bg);border:1px solid var(--line-strong);border-radius:7px;padding:11px 12px;transition:border-color .15s,box-shadow .15s}
+  select{-webkit-appearance:none;appearance:none;padding-right:40px;cursor:pointer}
+  textarea{min-height:96px;resize:vertical}
+  select:hover:not(:disabled){border-color:#9aa6b1}
+  select:focus,input:focus,textarea:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px var(--focus)}
+  select:disabled{cursor:not-allowed;color:#a7b0b8;background:#f2f4f6}
+  .selectwrap::after{content:"";position:absolute;right:14px;top:50%;width:8px;height:8px;border-right:2px solid #67737e;
+    border-bottom:2px solid #67737e;transform:translateY(-65%) rotate(45deg);pointer-events:none}
+  .selectwrap.locked::after{opacity:.3}
+  .meta{font-size:11.5px;color:var(--muted);margin-top:5px}
+  .ref{border:1px solid var(--line);background:#f8fafb;border-radius:8px;padding:13px 15px;margin:2px 0 20px}
+  .ref .rt{font:600 10px/1 ui-sans-serif;letter-spacing:.12em;text-transform:uppercase;color:var(--navy);margin-bottom:10px}
+  .ref .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 14px}
+  .ref .c{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .ref .k{font:600 9.5px/1.2 ui-sans-serif;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+  .ref .v{font:600 12.5px/1.3 ui-monospace,Menlo,Consolas,monospace;color:var(--navy-deep);word-break:break-word}
+  @media(max-width:520px){.ref .grid{grid-template-columns:1fr 1fr}}
+  .drop{border:1.5px dashed var(--line-strong);border-radius:8px;background:#fafbfc;padding:24px 16px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+  .drop:hover,.drop.over{border-color:var(--navy);background:#f1f6fa}
+  .drop .pick{display:inline-block;font-weight:600;font-size:13.5px;color:var(--navy);border:1px solid var(--line-strong);background:#fff;border-radius:7px;padding:9px 15px}
+  .drop .dd{display:block;color:var(--muted);font-size:12.5px;margin-top:10px}
+  .files{list-style:none;margin:10px 0 0;padding:0}
+  .files li{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:8px 11px;margin-top:7px;font-size:13px}
+  .files .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .files .sz{color:var(--muted);font-size:11.5px;flex:0 0 auto}
+  .files .x{flex:0 0 auto;border:none;background:none;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;padding:0 2px}
+  .files .x:hover{color:var(--err)}
+  hr{border:none;border-top:1px solid var(--line);margin:24px 0 20px}
+  .actions{display:flex;align-items:center;gap:12px}
+  button.submit{font:600 14px/1 ui-sans-serif;background:var(--navy);color:#fff;border:none;border-radius:7px;padding:13px 22px;cursor:pointer;transition:filter .15s}
+  button.submit:hover:not(:disabled){filter:brightness(1.08)}
+  button.submit:disabled{background:#aab6c0;cursor:not-allowed}
+  .msg{font-size:13px;font-weight:600;min-height:18px}
+  .msg.ok{color:var(--ok)} .msg.err{color:var(--err)} .msg a{color:var(--navy)}
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="topbar"></div>
+  <div class="inner">
+    <h1>Invoice Submission</h1>
+    <p class="lede">Explore Asheville &middot; FY27 budget coding. Pick the entity and the rest narrows down to a valid coded line.</p>
+
+    <div class="q"><label>Vendor Name<span class="req">*</span></label><input type="text" id="vendor" placeholder="Enter your answer"/></div>
+    <div class="q"><label>Entity<span class="req">*</span></label><div class="selectwrap"><select id="entity"><option value="">Choose one...</option></select></div></div>
+    <div class="q"><label>Fund<span class="req">*</span></label><div class="selectwrap locked"><select id="fund" disabled><option value="">Choose one...</option></select></div></div>
+    <div class="q"><label>Department<span class="req">*</span></label><div class="selectwrap locked"><select id="dept" disabled><option value="">Choose one...</option></select></div></div>
+    <div class="q"><label>Program<span class="req">*</span></label><div class="selectwrap locked"><select id="prog" disabled><option value="">Choose one...</option></select></div><div class="meta" id="progMeta"></div></div>
+    <div class="q"><label>Ledger Account/GL Code<span class="req">*</span></label><div class="selectwrap locked"><select id="gl" disabled><option value="">Choose one...</option></select></div><div class="meta" id="glMeta"></div></div>
+    <div class="q"><label>Spend Category<span class="req">*</span></label><div class="selectwrap locked"><select id="sc" disabled><option value="">Choose one...</option></select></div><div class="meta" id="scMeta"></div></div>
+
+    <div class="ref" id="ref" hidden>
+      <div class="rt">Auto-filled from the budget line</div>
+      <div class="grid">
+        <div class="c"><span class="k">Program Hierarchy</span><span class="v" id="r_ph">&mdash;</span></div>
+        <div class="c"><span class="k">FY26 Budget</span><span class="v" id="r_b26">&mdash;</span></div>
+        <div class="c"><span class="k">FY26 Forecast</span><span class="v" id="r_f26">&mdash;</span></div>
+        <div class="c"><span class="k">FY27 Proposed</span><span class="v" id="r_p27">&mdash;</span></div>
+      </div>
+    </div>
+
+    <div class="q"><label>Memo<span class="req">*</span></label><textarea id="memo" placeholder="Enter your answer"></textarea></div>
+
+    <div class="q">
+      <label>Upload invoice and any additional documentation (new vendor forms, context documents, etc.)<span class="req">*</span></label>
+      <div class="drop" id="drop">
+        <span class="pick">Select files...</span>
+        <span class="dd">or drag and drop files here</span>
+        <input type="file" id="fileInput" multiple style="display:none"/>
+      </div>
+      <ul class="files" id="fileList"></ul>
+    </div>
+
+    <hr/>
+    <div class="actions"><button class="submit" id="submitBtn" disabled>Submit</button><span class="msg" id="msg"></span></div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const vendor=$("vendor"),entity=$("entity"),fund=$("fund"),dept=$("dept"),prog=$("prog"),gl=$("gl"),sc=$("sc"),memo=$("memo"),msg=$("msg");
+let CASC={},ENTITIES=[],FILES=[];
+
+fetch("budget_tree.json").then(r=>r.json()).then(d=>{CASC=d.cascade;ENTITIES=d.entities;fill(entity,ENTITIES,"Choose one...");})
+  .catch(()=>{msg.className="msg err";msg.textContent="Could not load the budget data. Refresh to try again.";});
+
+function fill(sel,items,ph){sel.innerHTML="";const o=document.createElement("option");o.value="";o.textContent=ph;sel.appendChild(o);
+  items.forEach(v=>{const op=document.createElement("option");op.value=v;op.textContent=v;sel.appendChild(op);});}
+function lock(sel,locked){sel.disabled=locked;sel.closest(".selectwrap").classList.toggle("locked",locked);}
+function reset(level){const steps=[[fund],[dept],[prog,"progMeta"],[gl,"glMeta"],[sc,"scMeta"]];
+  for(let i=level;i<steps.length;i++){const s=steps[i][0];fill(s,[],"Choose one...");lock(s,true);if(steps[i][1])$(steps[i][1]).textContent="";}}
+function keys(o){return o?Object.keys(o):[];}
+function node(){return CASC?.[entity.value]?.[fund.value]?.[dept.value]?.[prog.value]?.[gl.value];}
+
+entity.addEventListener("change",()=>{reset(0);const v=entity.value;if(v){fill(fund,keys(CASC[v]),"Choose one...");lock(fund,false);}validate();});
+fund.addEventListener("change",()=>{reset(1);const c=CASC[entity.value]?.[fund.value];if(c){fill(dept,keys(c),"Choose one...");lock(dept,false);}validate();});
+dept.addEventListener("change",()=>{reset(2);const c=CASC[entity.value]?.[fund.value]?.[dept.value];
+  if(c){const k=keys(c);fill(prog,k,"Choose one...");lock(prog,false);$("progMeta").textContent=k.length+" program"+(k.length>1?"s":"");}validate();});
+prog.addEventListener("change",()=>{reset(3);const c=CASC[entity.value]?.[fund.value]?.[dept.value]?.[prog.value];
+  if(c){const k=keys(c);fill(gl,k,"Choose one...");lock(gl,false);$("glMeta").textContent=k.length+" GL code"+(k.length>1?"s":"");}validate();});
+gl.addEventListener("change",()=>{reset(4);const c=CASC[entity.value]?.[fund.value]?.[dept.value]?.[prog.value]?.[gl.value];
+  if(c){const k=keys(c);fill(sc,k,"Choose one...");lock(sc,false);$("scMeta").textContent=k.length+" spend categor"+(k.length>1?"ies":"y");}validate();});
+sc.addEventListener("change",validate);
+[vendor,memo].forEach(el=>el.addEventListener("input",validate));
+
+function money(v){return (typeof v==="number")?"$"+v.toLocaleString("en-US",{maximumFractionDigits:0}):"\u2014";}
+function showRef(){const leaf=node()?.[sc.value];const ref=$("ref");
+  if(leaf){$("r_ph").textContent=leaf.program_hierarchy||"\u2014";$("r_b26").textContent=money(leaf.fy26_budget);
+    $("r_f26").textContent=money(leaf.fy26_forecast);$("r_p27").textContent=money(leaf.fy27_proposed);ref.hidden=false;}else ref.hidden=true;}
+
+const drop=$("drop"),fileInput=$("fileInput"),fileList=$("fileList");
+drop.addEventListener("click",()=>fileInput.click());
+drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("over");});
+drop.addEventListener("dragleave",()=>drop.classList.remove("over"));
+drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("over");addFiles(e.dataTransfer.files);});
+fileInput.addEventListener("change",()=>{addFiles(fileInput.files);fileInput.value="";});
+function addFiles(list){for(const f of list)FILES.push(f);renderFiles();validate();}
+function fmtSize(b){return b<1024?b+" B":b<1048576?(b/1024).toFixed(0)+" KB":(b/1048576).toFixed(1)+" MB";}
+function renderFiles(){fileList.innerHTML="";FILES.forEach((f,i)=>{const li=document.createElement("li");
+  li.innerHTML='<span class="nm">'+f.name+'</span><span class="sz">'+fmtSize(f.size)+'</span><button class="x" title="Remove">&times;</button>';
+  li.querySelector(".x").addEventListener("click",()=>{FILES.splice(i,1);renderFiles();validate();});fileList.appendChild(li);});}
+
+function complete(){return vendor.value.trim()&&entity.value&&fund.value&&dept.value&&prog.value&&gl.value&&sc.value&&memo.value.trim()&&FILES.length>0;}
+function validate(){showRef();$("submitBtn").disabled=!complete();msg.textContent="";msg.className="msg";}
+
+$("submitBtn").addEventListener("click",async()=>{
+  const btn=$("submitBtn");btn.disabled=true;btn.textContent="Submitting...";msg.className="msg";msg.textContent="";
+  const fd=new FormData();
+  fd.append("vendor_name",vendor.value.trim());fd.append("entity",entity.value);fd.append("fund",fund.value);
+  fd.append("department",dept.value);fd.append("program",prog.value);fd.append("gl_code",gl.value);
+  fd.append("spend_category",sc.value);fd.append("memo",memo.value.trim());
+  FILES.forEach(f=>fd.append("files",f,f.name));
+  try{
+    const r=await fetch("api/submit",{method:"POST",body:fd});const data=await r.json();
+    if(r.ok){msg.className="msg ok";
+      let t="Submitted. "+(data.attached?data.attached+" file"+(data.attached>1?"s":"")+" attached. ":"");
+      msg.innerHTML=t+(data.permalink?'<a href="'+data.permalink+'" target="_blank" rel="noopener">Open in Asana</a>.':"");btn.textContent="Submit";}
+    else{msg.className="msg err";msg.textContent=data.detail||"Something went wrong. Try again.";btn.textContent="Submit";btn.disabled=false;}
+  }catch(e){msg.className="msg err";msg.textContent="Could not reach the server. Try again.";btn.textContent="Submit";btn.disabled=false;}
+});
+</script>
+</body>
+</html>

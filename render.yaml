@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: ea-budget-intake
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ASANA_PAT
+        sync: false          # set as a secret in the Render dashboard
+      - key: ASANA_PROJECT_GID
+        sync: false
+      - key: ASANA_FIELD_MAP
+        sync: false          # optional; leave unset to write codes into the task description
