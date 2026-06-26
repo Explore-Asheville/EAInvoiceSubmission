@@ -58,9 +58,43 @@
   button.submit:disabled{background:#aab6c0;cursor:not-allowed}
   .msg{font-size:13px;font-weight:600;min-height:18px}
   .msg.ok{color:var(--ok)} .msg.err{color:var(--err)} .msg a{color:var(--navy)}
+  /* splash */
+  .splash{position:fixed;inset:0;z-index:1000;background:#f5f6f7;display:flex;flex-direction:column;align-items:center;padding:0 20px;overflow:auto}
+  .splash.hide{display:none}
+  .splash h1{font:600 30px/1.2 Georgia,"Times New Roman",serif;color:var(--navy);text-align:center;margin:14vh 0 6px}
+  .splash .accent{width:64px;height:5px;border-radius:5px;background:linear-gradient(90deg,var(--navy),var(--gold));margin:0 0 30px}
+  .splash .sub{color:var(--muted);font-size:14px;text-align:center;margin:-18px 0 40px}
+  .choices{display:flex;gap:26px;flex-wrap:wrap;justify-content:center}
+  .choice{width:236px;height:236px;border:1px solid var(--line-strong);border-radius:5px;background:#fff;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:36px;
+    text-decoration:none;cursor:pointer;box-shadow:0 1px 3px rgba(20,40,60,.06),0 10px 26px rgba(20,40,60,.07);
+    transition:border-color .15s,box-shadow .15s,transform .08s;font-family:inherit}
+  .choice:hover{border-color:var(--navy);box-shadow:0 2px 6px rgba(20,40,60,.1),0 16px 34px rgba(20,40,60,.12);transform:translateY(-3px)}
+  .choice:active{transform:translateY(-1px)}
+  .choice .yr{font:700 40px/1 Georgia,"Times New Roman",serif;color:var(--navy)}
+  .choice .lbl{font-size:14px;font-weight:600;color:#33404b;text-align:center}
+  .choice .hint{font-size:12px;color:var(--muted);text-align:center}
+  @media(max-width:520px){.splash h1{margin-top:8vh}.choice{width:88vw;height:auto;min-height:150px}}
 </style>
 </head>
 <body>
+<div class="splash" id="splash">
+  <h1>Invoice Submission</h1>
+  <div class="accent"></div>
+  <div class="sub">Which fiscal year is this invoice for?</div>
+  <div class="choices">
+    <a class="choice" href="https://form.asana.com/?k=8gojQRCHwEk3wRqG6naQPA&d=10441446231050">
+      <span class="yr">FY26</span>
+      <span class="lbl">FY26 Invoice Submission</span>
+      <span class="hint">Opens the Asana form</span>
+    </a>
+    <button class="choice" id="fy27Btn" type="button">
+      <span class="yr">FY27</span>
+      <span class="lbl">FY27 Invoice Submission</span>
+      <span class="hint">Continue here</span>
+    </button>
+  </div>
+</div>
 <div class="sheet">
   <div class="topbar"></div>
   <div class="inner">
@@ -74,16 +108,6 @@
     <div class="q"><label>Program<span class="req">*</span></label><div class="selectwrap locked"><select id="prog" disabled><option value="">Choose one...</option></select></div><input type="text" id="progTxt" placeholder="Enter your answer" style="display:none"/><div class="meta" id="progMeta"></div></div>
     <div class="q"><label>Ledger Account/GL Code<span class="req">*</span></label><div class="selectwrap locked"><select id="gl" disabled><option value="">Choose one...</option></select></div><input type="text" id="glTxt" placeholder="Enter your answer" style="display:none"/><div class="meta" id="glMeta"></div></div>
     <div class="q"><label>Spend Category<span class="req">*</span></label><div class="selectwrap locked"><select id="sc" disabled><option value="">Choose one...</option></select></div><input type="text" id="scTxt" placeholder="Enter your answer" style="display:none"/><div class="meta" id="scMeta"></div></div>
-
-    <div class="ref" id="ref" hidden>
-      <div class="rt">Auto-filled from the budget line</div>
-      <div class="grid">
-        <div class="c"><span class="k">Program Hierarchy</span><span class="v" id="r_ph">&mdash;</span></div>
-        <div class="c"><span class="k">FY26 Budget</span><span class="v" id="r_b26">&mdash;</span></div>
-        <div class="c"><span class="k">FY26 Forecast</span><span class="v" id="r_f26">&mdash;</span></div>
-        <div class="c"><span class="k">FY27 Proposed</span><span class="v" id="r_p27">&mdash;</span></div>
-      </div>
-    </div>
 
     <div class="q"><label>Memo<span class="req">*</span></label><textarea id="memo" placeholder="Enter your answer"></textarea></div>
 
@@ -104,6 +128,7 @@
 
 <script>
 const $=id=>document.getElementById(id);
+$("fy27Btn").addEventListener("click",()=>$("splash").classList.add("hide"));
 const vendor=$("vendor"),entity=$("entity"),fund=$("fund"),dept=$("dept"),prog=$("prog"),gl=$("gl"),sc=$("sc"),memo=$("memo"),msg=$("msg");
 let CASC={},ENTITIES=[],FILES=[];
 
@@ -130,7 +155,6 @@ function setFreeMode(on){
     s.closest(".selectwrap").style.display=on?"none":"";t.style.display=on?"":"none";
     if(on){s.value="";}else{t.value="";}});
   ["progMeta","glMeta","scMeta"].forEach(id=>$(id).textContent="");
-  if(on)$("ref").hidden=true;
 }
 function fld(sid,tid){return freeMode?$(tid).value.trim():$(sid).value;}
 
@@ -149,9 +173,6 @@ sc.addEventListener("change",validate);
 FREE.forEach(([,tid])=>$(tid).addEventListener("input",validate));
 
 function money(v){return (typeof v==="number")?"$"+v.toLocaleString("en-US",{maximumFractionDigits:0}):"\u2014";}
-function showRef(){if(freeMode){$("ref").hidden=true;return;}const leaf=node()?.[sc.value];const ref=$("ref");
-  if(leaf){$("r_ph").textContent=leaf.program_hierarchy||"\u2014";$("r_b26").textContent=money(leaf.fy26_budget);
-    $("r_f26").textContent=money(leaf.fy26_forecast);$("r_p27").textContent=money(leaf.fy27_proposed);ref.hidden=false;}else ref.hidden=true;}
 
 const drop=$("drop"),fileInput=$("fileInput"),fileList=$("fileList");
 drop.addEventListener("click",()=>fileInput.click());
@@ -166,7 +187,7 @@ function renderFiles(){fileList.innerHTML="";FILES.forEach((f,i)=>{const li=docu
   li.querySelector(".x").addEventListener("click",()=>{FILES.splice(i,1);renderFiles();validate();});fileList.appendChild(li);});}
 
 function complete(){return vendor.value.trim()&&entity.value&&fund.value&&fld("dept","deptTxt")&&fld("prog","progTxt")&&fld("gl","glTxt")&&fld("sc","scTxt")&&memo.value.trim()&&FILES.length>0;}
-function validate(){showRef();$("submitBtn").disabled=!complete();msg.textContent="";msg.className="msg";}
+function validate(){$("submitBtn").disabled=!complete();msg.textContent="";msg.className="msg";}
 
 $("submitBtn").addEventListener("click",async()=>{
   const btn=$("submitBtn");btn.disabled=true;btn.textContent="Submitting...";msg.className="msg";msg.textContent="";

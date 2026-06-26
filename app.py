@@ -133,6 +133,41 @@ def tree():
     return FileResponse(BASE / "budget_tree.json")
 
 
+@app.get("/api/diag")
+async def diag():
+    """Diagnose Asana auth: confirms the token is valid and the project is reachable.
+    Safe and read-only; never returns the token."""
+    if not ASANA_PAT:
+        return {"token_set": False, "detail": "ASANA_PAT is not set."}
+    auth = {"Authorization": f"Bearer {ASANA_PAT}"}
+    out = {"token_set": True, "token_length": len(ASANA_PAT)}
+    async with httpx.AsyncClient(timeout=20) as client:
+        try:
+            me = await client.get(f"{ASANA_API}/users/me", headers=auth,
+                                  params={"opt_fields": "name,email"})
+            if me.status_code < 400:
+                d = me.json().get("data", {})
+                out["users_me"] = {"ok": True, "name": d.get("name"), "email": d.get("email")}
+            else:
+                out["users_me"] = {"ok": False, "status": me.status_code,
+                                   "error": me.json().get("errors", [{}])[0].get("message", me.text)}
+        except httpx.HTTPError as exc:
+            out["users_me"] = {"ok": False, "error": str(exc)}
+
+        if ASANA_PROJECT_GID:
+            try:
+                pr = await client.get(f"{ASANA_API}/projects/{ASANA_PROJECT_GID}",
+                                     headers=auth, params={"opt_fields": "name"})
+                if pr.status_code < 400:
+                    out["project"] = {"ok": True, "name": pr.json().get("data", {}).get("name")}
+                else:
+                    out["project"] = {"ok": False, "status": pr.status_code,
+                                      "error": pr.json().get("errors", [{}])[0].get("message", pr.text)}
+            except httpx.HTTPError as exc:
+                out["project"] = {"ok": False, "error": str(exc)}
+    return out
+
+
 @app.get("/healthz")
 def healthz():
     return {
