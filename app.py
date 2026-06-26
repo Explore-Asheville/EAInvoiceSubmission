@@ -29,6 +29,9 @@ MAX_FILE_MB = 50
 
 ASANA_PAT = os.environ.get("ASANA_PAT", "")
 ASANA_PROJECT_GID = os.environ.get("ASANA_PROJECT_GID", "")
+# Section new tasks land in (the workflow entry point). Leave unset to drop them
+# into the project ungrouped.
+ASANA_SECTION_GID = os.environ.get("ASANA_SECTION_GID", "")
 # Optional: map fields onto custom fields by GID. Text fields for the codes and
 # vendor/entity/fund/program_hierarchy; number fields for the dollar figures.
 # Recognized keys: vendor_name, entity, fund, department, program_hierarchy,
@@ -196,6 +199,17 @@ async def submit(
 
         task = r.json().get("data", {})
         task_gid = task.get("gid")
+
+        # Move the task into the workflow entry section, if configured.
+        if ASANA_SECTION_GID and task_gid:
+            try:
+                await client.post(
+                    f"{ASANA_API}/sections/{ASANA_SECTION_GID}/addTask",
+                    headers={**auth, "Content-Type": "application/json"},
+                    json={"data": {"task": task_gid}},
+                )
+            except httpx.HTTPError:
+                pass  # task still exists in the project even if section placement fails
 
         attached, failed = 0, []
         for filename, content, ctype in payloads:

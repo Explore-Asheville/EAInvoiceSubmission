@@ -7,8 +7,10 @@ services:
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: ASANA_PAT
-        sync: false          # set as a secret in the Render dashboard
+        sync: false          # secret: set in the Render dashboard, never commit it
       - key: ASANA_PROJECT_GID
-        sync: false
+        value: "1212071690368205"          # FY26 Invoices project
+      - key: ASANA_SECTION_GID
+        value: "1212071690368206"          # "Invoices to be Processed" section
       - key: ASANA_FIELD_MAP
-        sync: false          # optional; leave unset to write codes into the task description
+        value: '{"vendor_name":"1213184847617955"}'   # Vendor Name (text) custom field
