@@ -76,6 +76,10 @@
   .ac.hide{display:none}
   .ac li{padding:9px 11px;border-radius:6px;font-size:14px;cursor:pointer;color:var(--ink)}
   .ac li.active,.ac li:hover{background:#EEF5F7;color:var(--navy-deep)}
+  .vhint{margin-top:8px;font-size:12.5px;line-height:1.55;color:var(--ink);background:var(--cream);
+    border:1px solid #EAD9B0;border-left:3px solid var(--gold);border-radius:7px;padding:9px 12px}
+  .vhint.hide{display:none}
+  .vhint a{color:var(--navy);font-weight:600}
   /* splash */
   .splash{position:fixed;inset:0;z-index:1000;background:var(--bg);display:flex;flex-direction:column;align-items:center;padding:0 20px;overflow:auto}
   .splash.hide{display:none}
@@ -123,7 +127,8 @@
       <div class="acwrap">
         <input type="text" id="vendor" autocomplete="off" placeholder="Start typing the vendor name"/>
         <ul class="ac hide" id="vendorAC"></ul>
-      </div></div>
+      </div>
+      <div class="vhint hide" id="vendorHint">No match in the vendor list. If this is a new vendor, <a href="https://exploreasheville.sharepoint.com/:w:/s/ExecOffice2/IQBeehrwNSxdQI8MacBAtE0yAcOyALGdo-BnOqD2pXe4tZY?e=qrAb9T" target="_blank" rel="noopener">download the New Vendor Form</a> and send it to them to complete.</div></div>
 
     <div class="q"><label>Amount<span class="req">*</span></label>
       <input type="text" id="amount" inputmode="decimal" placeholder="0.00"/></div>
@@ -150,6 +155,7 @@
 
     <hr/>
     <div class="actions"><button class="submit" id="submitBtn" disabled>Submit</button><span class="msg" id="msg"></span></div>
+    <div style="text-align:right;font-size:10px;color:var(--muted);margin-top:14px;letter-spacing:.04em">v7</div>
   </div>
 </div>
 
@@ -170,16 +176,17 @@ fetch("vendors.json").then(r=>r.json()).then(d=>{VENDORS=d.vendors||[];})
 const acBox=$("vendorAC");let acIdx=-1,acMatches=[];
 function hideAC(){acBox.classList.add("hide");acIdx=-1;}
 function renderAC(){
-  const q=vendor.value.trim().toLowerCase();
-  if(!q||!VENDORS.length){hideAC();return;}
+  const q=vendor.value.trim().toLowerCase();const hint=$("vendorHint");
+  if(!q||!VENDORS.length){hideAC();hint.classList.add("hide");return;}
   const starts=[],contains=[];
   for(const v of VENDORS){const lv=v.toLowerCase();
     if(lv.startsWith(q))starts.push(v);else if(lv.includes(q))contains.push(v);}
   acMatches=starts.concat(contains).slice(0,8);
-  if(!acMatches.length){hideAC();return;}
+  if(!acMatches.length){hideAC();hint.classList.remove("hide");return;}
+  hint.classList.add("hide");
   acBox.innerHTML="";
   acMatches.forEach(v=>{const li=document.createElement("li");li.textContent=v;
-    li.addEventListener("mousedown",e=>{e.preventDefault();vendor.value=v;hideAC();validate();});
+    li.addEventListener("mousedown",e=>{e.preventDefault();vendor.value=v;hideAC();$("vendorHint").classList.add("hide");validate();});
     acBox.appendChild(li);});
   acIdx=-1;acBox.classList.remove("hide");
 }
@@ -218,7 +225,10 @@ function setFreeMode(on){freeMode=on;
   ["glMeta","deptMeta","progMeta","scMeta"].forEach(id=>$(id).textContent="");}
 function fld(sid,tid){return freeMode?$(tid).value.trim():$(sid).value;}
 
-entity.addEventListener("change",()=>{reset(0);setFreeMode(false);const v=entity.value;if(v){fillFund(keys(CASC[v]));lock(fund,false);}validate();});
+entity.addEventListener("change",()=>{reset(0);setFreeMode(false);const v=entity.value;
+  if(v){fillFund(keys(CASC[v]));lock(fund,false);
+    if(v==="Explore Asheville"&&CASC[v]["133"]){fund.value="133";fund.dispatchEvent(new Event("change"));}}
+  validate();});
 fund.addEventListener("change",()=>{reset(0);const c=CASC[entity.value]?.[fund.value];
   if(c&&Object.keys(c).length===0){setFreeMode(true);}
   else{setFreeMode(false);if(c){const k=keys(c);fill(gl,k,"Choose one...");lock(gl,false);$("glMeta").textContent=k.length+" GL code"+(k.length>1?"s":"");}}validate();});

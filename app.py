@@ -52,6 +52,9 @@ FUND_LABELS = {
 
 app = FastAPI(title="EA Invoice Submission")
 
+VERSION = "v7"
+NOSTORE = {"Cache-Control": "no-store, max-age=0"}
+
 
 def lookup(entity, fund, gl_code, department, program, spend_category):
     """Return (leaf, is_freeform). Cascade order: entity > fund > gl > dept > program > spend.
@@ -65,6 +68,24 @@ def lookup(entity, fund, gl_code, department, program, spend_category):
         return fund_node[gl_code][department][program][spend_category], False
     except KeyError:
         return None, False
+
+
+def trace(entity, fund, gl_code, department, program, spend_category):
+    """Walk the cascade and report the first level whose value was not found."""
+    node = CASCADE.get(entity)
+    if node is None:
+        return f"Entity not found: {entity!r}"
+    node = node.get(fund)
+    if node is None:
+        return f"Fund not found under entity: {fund!r}"
+    if not node:
+        return "freeform"
+    for label, key in (("Account/GL", gl_code), ("Department", department),
+                       ("Program", program), ("Spend Category", spend_category)):
+        if key not in node:
+            return f"{label} not found at its level: {key!r}"
+        node = node[key]
+    return "ok"
 
 
 def money(v):
@@ -90,6 +111,34 @@ def coded_lines(fields, leaf):
     ]
 
 
+def custom_fields_for(fields, leaf):
+    """Build the {field_gid: value} map from ASANA_FIELD_MAP. Empty if not configured."""
+    if not ASANA_FIELD_MAP:
+        return {}
+    cf = {}
+    text_vals = {
+        "vendor_name": fields["vendor_name"], "entity": fields["entity"],
+        "fund": fields["fund"], "department": fields["department"],
+        "program_hierarchy": leaf.get("program_hierarchy"), "program": fields["program"],
+        "gl_code": fields["gl_code"], "spend_category": fields["spend_category"],
+    }
+    for k, v in text_vals.items():
+        gid = ASANA_FIELD_MAP.get(k)
+        if gid and v:
+            cf[gid] = v
+    amount_gid = ASANA_FIELD_MAP.get("amount")
+    if amount_gid and fields["amount"]:
+        try:
+            cf[amount_gid] = float(str(fields["amount"]).replace(",", "").replace("$", ""))
+        except ValueError:
+            pass
+    for k in ("fy26_budget", "fy26_forecast", "fy27_proposed"):
+        gid = ASANA_FIELD_MAP.get(k)
+        if gid and isinstance(leaf.get(k), (int, float)):
+            cf[gid] = leaf[k]
+    return cf
+
+
 def build_task(fields, leaf):
     dept_short = fields["department"].split("(")[0].strip()
     name = f"Invoice: {fields['vendor_name']} | {dept_short} | {fields['spend_category']}"
@@ -103,33 +152,7 @@ def build_task(fields, leaf):
         f"FY27 Proposed Budget: {money(leaf.get('fy27_proposed'))}",
     ]
     notes = "Invoice submission\n\n" + "\n".join(block) + "\n" + "\n".join(ref)
-    data = {"name": name, "notes": notes, "projects": [ASANA_PROJECT_GID]}
-
-    if ASANA_FIELD_MAP:
-        cf = {}
-        text_vals = {
-            "vendor_name": fields["vendor_name"], "entity": fields["entity"],
-            "fund": fields["fund"], "department": fields["department"],
-            "program_hierarchy": leaf.get("program_hierarchy"), "program": fields["program"],
-            "gl_code": fields["gl_code"], "spend_category": fields["spend_category"],
-        }
-        for k, v in text_vals.items():
-            gid = ASANA_FIELD_MAP.get(k)
-            if gid and v:
-                cf[gid] = v
-        amount_gid = ASANA_FIELD_MAP.get("amount")
-        if amount_gid and fields["amount"]:
-            try:
-                cf[amount_gid] = float(str(fields["amount"]).replace(",", "").replace("$", ""))
-            except ValueError:
-                pass
-        for k in ("fy26_budget", "fy26_forecast", "fy27_proposed"):
-            gid = ASANA_FIELD_MAP.get(k)
-            if gid and isinstance(leaf.get(k), (int, float)):
-                cf[gid] = leaf[k]
-        if cf:
-            data["custom_fields"] = cf
-    return data
+    return {"name": name, "notes": notes, "projects": [ASANA_PROJECT_GID]}
 
 
 def make_cover_pdf(fields, leaf) -> bytes:
@@ -185,17 +208,17 @@ def stamp_pdf(original: bytes, cover: bytes) -> bytes:
 
 @app.get("/")
 def index():
-    return FileResponse(BASE / "index.html")
+    return FileResponse(BASE / "index.html", headers=NOSTORE)
 
 
 @app.get("/budget_tree.json")
 def tree():
-    return FileResponse(BASE / "budget_tree.json")
+    return FileResponse(BASE / "budget_tree.json", headers=NOSTORE)
 
 
 @app.get("/vendors.json")
 def vendors():
-    return FileResponse(BASE / "vendors.json")
+    return FileResponse(BASE / "vendors.json", headers=NOSTORE)
 
 
 @app.get("/api/diag")
@@ -229,8 +252,17 @@ async def diag():
 
 @app.get("/healthz")
 def healthz():
-    return {"ok": True, "asana_configured": bool(ASANA_PAT and ASANA_PROJECT_GID),
-            "field_mapping": sorted(ASANA_FIELD_MAP.keys()), "entities": list(CASCADE.keys())}
+    # cascade signature: first level under a sample fund, to confirm data order/version
+    sig = {}
+    try:
+        ent = next(iter(CASCADE)); fund = next(iter(CASCADE[ent]))
+        sig = {"entity": ent, "fund": fund, "level3_keys_sample": list(CASCADE[ent][fund])[:3]}
+    except Exception:
+        pass
+    return {"ok": True, "version": VERSION,
+            "asana_configured": bool(ASANA_PAT and ASANA_PROJECT_GID),
+            "field_mapping": sorted(ASANA_FIELD_MAP.keys()),
+            "entities": list(CASCADE.keys()), "cascade_signature": sig}
 
 
 @app.post("/api/submit")
@@ -261,9 +293,14 @@ async def submit(
             raise HTTPException(status_code=422, detail="Account/GL, Department, Program, and Spend Category are required.")
         leaf = {}
     elif leaf is None:
+        where = trace(entity, fund, gl_code, department, program, spend_category)
+        print(f"[submit] rejected combination ({VERSION}): {where} | "
+              f"entity={entity!r} fund={fund!r} gl={gl_code!r} dept={department!r} "
+              f"program={program!r} spend={spend_category!r}", flush=True)
         raise HTTPException(status_code=422,
-            detail="That Entity, Fund, Account/GL, Department, Program, and Spend Category "
-                   "combination is not in the budget. Reselect from the dropdowns.")
+            detail=f"This combination is not in the budget ({where}). If everything in the "
+                   "dropdowns looks right, hard-refresh the page (Cmd/Ctrl+Shift+R) and try "
+                   "again, the page may have cached an older version.")
 
     real_files = [f for f in files if f.filename]
     if not real_files:
@@ -317,6 +354,23 @@ async def submit(
             except httpx.HTTPError:
                 pass
 
+        # set custom fields (e.g. Vendor Name) after the task is in the project/section
+        field_warning = None
+        cf = custom_fields_for(fields, leaf)
+        if cf and task_gid:
+            try:
+                cfr = await client.put(f"{ASANA_API}/tasks/{task_gid}",
+                    headers={**auth, "Content-Type": "application/json"},
+                    json={"data": {"custom_fields": cf}})
+                if cfr.status_code >= 400:
+                    field_warning = cfr.json().get("errors", [{}])[0].get("message", cfr.text)
+                    print(f"[submit] custom field write failed ({VERSION}): {field_warning} | cf={cf}", flush=True)
+            except httpx.HTTPError as exc:
+                field_warning = str(exc)
+                print(f"[submit] custom field write error ({VERSION}): {exc}", flush=True)
+        elif not ASANA_FIELD_MAP:
+            print(f"[submit] note ({VERSION}): ASANA_FIELD_MAP not set; custom fields not written.", flush=True)
+
         attached, failed = 0, []
         for filename, content, ctype in stamped:
             try:
@@ -330,4 +384,5 @@ async def submit(
                 failed.append(filename)
 
     return JSONResponse({"ok": True, "task_gid": task_gid, "permalink": task.get("permalink_url"),
-                         "name": task.get("name"), "attached": attached, "failed": failed})
+                         "name": task.get("name"), "attached": attached, "failed": failed,
+                         "field_warning": field_warning})
