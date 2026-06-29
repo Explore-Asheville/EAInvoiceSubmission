@@ -9,17 +9,18 @@ attaches the uploaded invoice files to it.
 ## Field order
 
 ```
-Vendor Name (text)
-Entity      (dropdown)  ->  Fund -> Department -> Program -> Ledger/GL Code -> Spend Category
+Vendor Name (text, autocompletes from the vendor list)
+Amount      (text)
+Entity      (dropdown)  ->  Fund -> Ledger Account/GL Code -> Department -> Program -> Spend Category
 Memo        (long text)
 Upload invoice and supporting documents (one or more files, required)
 ```
 
-Entity through Spend Category is a single dependent chain: each choice filters the
-next, so the GL Code and Spend Category options are always valid for the chosen
-department and program. Program Hierarchy and the FY26/FY27 budget figures for the
-selected line are looked up automatically and shown as a reference, and they are
-written onto the task record.
+The field order follows accounting's request. Entity through Spend Category is a
+single dependent chain in that order: each choice filters the next, so every
+submission lands on a valid coded line. Program Hierarchy and the FY26/FY27 budget
+figures for the chosen line are looked up automatically and written onto the task
+record (they are not shown on the form).
 
 ## What is in here
 
@@ -41,8 +42,10 @@ written onto the task record.
    field is set and at least one file is attached.
 3. On submit, the form POSTs the fields and files (multipart) to `/api/submit`.
 4. The backend re-validates the full path against the budget (the browser is never
-   trusted), creates the task via `POST /tasks`, then uploads each file to the task
-   via `POST /attachments`, and returns the task permalink and attachment count.
+   trusted), creates the task via `POST /tasks`, places it in the
+   "Invoices to be Processed" section, stamps a coding cover page onto each uploaded
+   PDF, uploads the files via `POST /attachments`, and returns the task permalink and
+   attachment count.
 
 The task is named `Invoice: Vendor | Department | Spend Category`, and the full
 record (vendor, the six coded levels, Program Hierarchy, and the three budget
@@ -96,6 +99,31 @@ uvicorn app:app --reload --port 8000
 3. Add `ASANA_PAT`, `ASANA_PROJECT_GID`, and optionally `ASANA_FIELD_MAP` as secrets.
 4. Deploy. The form is at the service root URL.
 
+## Vendor autocomplete
+
+The Vendor Name field autocompletes from `vendors.json` (served by the app and
+filtered in the browser). Recommended workflow: keep the master vendor list as the
+Excel on SharePoint where accounting maintains it, and regenerate `vendors.json` from
+it when it changes:
+
+```bash
+pip install openpyxl
+python build_vendors.py "Vendor List.xlsx"     # writes vendors.json
+git commit -am "Update vendor list" && git push # Render redeploys
+```
+
+`build_vendors.py` auto-detects the vendor/name column (or pass `--col "Header"`) and
+accepts `.xlsx` or `.csv`. This keeps autocomplete instant (no per-keystroke API
+calls) and avoids live SharePoint/Graph auth in the request path. A scheduled
+Power Automate export to CSV plus this script can fully automate the refresh later.
+
+## PDF cover page
+
+Each uploaded PDF gets a one-page coding cover sheet prepended (Vendor, Amount,
+Entity, Fund, GL, Department, Program, Spend Category, Memo) in a sans-serif font,
+so the coding travels with the document, not just the Asana task. Non-PDF uploads
+are attached unchanged. The cap is 50 MB per file (`MAX_FILE_MB`).
+
 ## Notes
 
 - Funds display with their Sage names (e.g. "133 - EA Operating"). Explore Asheville
@@ -119,9 +147,9 @@ uvicorn app:app --reload --port 8000
 
 Replace `budget_tree.json` with a regenerated version of the same shape: an
 `entities` list and a `cascade` of
-`entity > fund > department > program > gl_code > {spend_category: {program_hierarchy,
-fy26_budget, fy26_forecast, fy27_proposed}}`. Redeploy; the form and validation pick
-up the new data with no code change.
+`entity > fund > gl_code > department > program > {spend_category: {program_hierarchy,
+fy26_budget, fy26_forecast, fy27_proposed}}` (note the GL-before-Department order).
+Redeploy; the form and validation pick up the new data with no code change.
 
 ## Security
 
