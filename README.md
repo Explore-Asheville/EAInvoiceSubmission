@@ -11,7 +11,7 @@ attaches the uploaded invoice files to it.
 ```
 Vendor Name (text, autocompletes from the vendor list)
 Amount      (text)
-Entity      (dropdown)  ->  Fund -> Ledger Account/GL Code -> Department -> Program -> Spend Category
+Department  (dropdown)  ->  Fund -> Program -> Spend Category -> Ledger Account/GL Code
 Memo        (long text)
 Upload invoice and supporting documents (one or more files, required)
 ```
@@ -145,11 +145,11 @@ are attached unchanged. The cap is 50 MB per file (`MAX_FILE_MB`).
 
 ## Updating the budget
 
-Replace `budget_tree.json` with a regenerated version of the same shape: an
-`entities` list and a `cascade` of
-`entity > fund > gl_code > department > program > {spend_category: {program_hierarchy,
-fy26_budget, fy26_forecast, fy27_proposed}}` (note the GL-before-Department order).
-Redeploy; the form and validation pick up the new data with no code change.
+Replace `budget_tree.json` with a regenerated version of the same shape: a
+`departments` list, an `entity_by_fund` map, and a `cascade` of
+`department > fund > program > spend_category > {gl_code: {program_hierarchy,
+fy26_budget, fy26_forecast, fy27_proposed}}`. Redeploy; the form and validation pick
+up the new data with no code change.
 
 ## Security
 

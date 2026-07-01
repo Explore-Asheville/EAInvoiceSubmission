@@ -43,6 +43,7 @@ except json.JSONDecodeError:
 with open(BASE / "budget_tree.json") as f:
     BUDGET = json.load(f)
 CASCADE = BUDGET["cascade"]
+ENTITY_BY_FUND = BUDGET.get("entity_by_fund", {})
 
 FUND_LABELS = {
     "130": "TDA Operating", "131": "TDA Earned Income", "132": "Always Asheville",
@@ -52,36 +53,36 @@ FUND_LABELS = {
 
 app = FastAPI(title="EA Invoice Submission")
 
-VERSION = "v8"
+VERSION = "v9"
 NOSTORE = {"Cache-Control": "no-store, max-age=0"}
 
 
-def lookup(entity, fund, gl_code, department, program, spend_category):
-    """Return (leaf, is_freeform). Cascade order: entity > fund > gl > dept > program > spend.
-    is_freeform=True when the fund exists but has no budget lines (e.g. 130)."""
-    fund_node = CASCADE.get(entity, {}).get(fund)
+def lookup(department, fund, program, spend_category, gl_code):
+    """Return (leaf, is_freeform). Cascade order: dept > fund > program > spend > gl.
+    is_freeform=True when the fund exists but has no budget lines (e.g. TDA Operating / 130)."""
+    fund_node = CASCADE.get(department, {}).get(fund)
     if fund_node is None:
         return None, False
     if not fund_node:
         return {}, True
     try:
-        return fund_node[gl_code][department][program][spend_category], False
+        return fund_node[program][spend_category][gl_code], False
     except KeyError:
         return None, False
 
 
-def trace(entity, fund, gl_code, department, program, spend_category):
+def trace(department, fund, program, spend_category, gl_code):
     """Walk the cascade and report the first level whose value was not found."""
-    node = CASCADE.get(entity)
+    node = CASCADE.get(department)
     if node is None:
-        return f"Entity not found: {entity!r}"
+        return f"Department not found: {department!r}"
     node = node.get(fund)
     if node is None:
-        return f"Fund not found under entity: {fund!r}"
+        return f"Fund not found under department: {fund!r}"
     if not node:
         return "freeform"
-    for label, key in (("Account/GL", gl_code), ("Department", department),
-                       ("Program", program), ("Spend Category", spend_category)):
+    for label, key in (("Program", program), ("Spend Category", spend_category),
+                       ("Account/GL", gl_code)):
         if key not in node:
             return f"{label} not found at its level: {key!r}"
         node = node[key]
@@ -252,32 +253,33 @@ async def diag():
 
 @app.get("/healthz")
 def healthz():
-    # cascade signature: first level under a sample fund, to confirm data order/version
+    # cascade signature: first dept/fund and its next-level keys, to confirm data order/version
     sig = {}
     try:
-        ent = next(iter(CASCADE)); fund = next(iter(CASCADE[ent]))
-        sig = {"entity": ent, "fund": fund, "level3_keys_sample": list(CASCADE[ent][fund])[:3]}
+        dept = next(iter(CASCADE)); fund = next(iter(CASCADE[dept]))
+        sig = {"department": dept, "fund": fund, "next_level_sample": list(CASCADE[dept][fund])[:3]}
     except Exception:
         pass
     return {"ok": True, "version": VERSION,
             "asana_configured": bool(ASANA_PAT and ASANA_PROJECT_GID),
             "field_mapping": sorted(ASANA_FIELD_MAP.keys()),
-            "entities": list(CASCADE.keys()), "cascade_signature": sig}
+            "departments": list(CASCADE.keys()),
+            "entity_by_fund": ENTITY_BY_FUND, "cascade_signature": sig}
 
 
 @app.post("/api/submit")
 async def submit(
     vendor_name: str = Form(...),
     amount: str = Form(...),
-    entity: str = Form(...),
-    fund: str = Form(...),
-    gl_code: str = Form(...),
     department: str = Form(...),
+    fund: str = Form(...),
     program: str = Form(...),
     spend_category: str = Form(...),
+    gl_code: str = Form(...),
     memo: str = Form(...),
     files: List[UploadFile] = File(default=[]),
 ):
+    entity = ENTITY_BY_FUND.get(fund, "")   # derived from fund, no longer a form field
     fields = {
         "vendor_name": vendor_name.strip(), "amount": amount.strip(), "entity": entity,
         "fund": fund, "gl_code": gl_code, "department": department, "program": program,
@@ -287,16 +289,16 @@ async def submit(
         if not fields[key]:
             raise HTTPException(status_code=422, detail=f"{label} is required.")
 
-    leaf, freeform = lookup(entity, fund, gl_code, department, program, spend_category)
+    leaf, freeform = lookup(department, fund, program, spend_category, gl_code)
     if freeform:
-        if not (gl_code.strip() and department.strip() and program.strip() and spend_category.strip()):
-            raise HTTPException(status_code=422, detail="Account/GL, Department, Program, and Spend Category are required.")
+        if not (program.strip() and spend_category.strip() and gl_code.strip()):
+            raise HTTPException(status_code=422, detail="Program, Spend Category, and Account/GL are required.")
         leaf = {}
     elif leaf is None:
-        where = trace(entity, fund, gl_code, department, program, spend_category)
+        where = trace(department, fund, program, spend_category, gl_code)
         print(f"[submit] rejected combination ({VERSION}): {where} | "
-              f"entity={entity!r} fund={fund!r} gl={gl_code!r} dept={department!r} "
-              f"program={program!r} spend={spend_category!r}", flush=True)
+              f"dept={department!r} fund={fund!r} program={program!r} "
+              f"spend={spend_category!r} gl={gl_code!r}", flush=True)
         raise HTTPException(status_code=422,
             detail=f"This combination is not in the budget ({where}). If everything in the "
                    "dropdowns looks right, hard-refresh the page (Cmd/Ctrl+Shift+R) and try "

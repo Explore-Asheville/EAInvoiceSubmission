@@ -121,7 +121,7 @@
   <div class="topbar"></div>
   <div class="inner">
     <h1>Invoice Submission</h1>
-    <p class="lede">Explore Asheville &middot; FY27 budget coding. Choose Entity and the rest narrows down to a valid coded line.</p>
+    <p class="lede">Explore Asheville &middot; FY27 budget coding. Choose Department and the rest narrows down to a valid coded line.</p>
 
     <div class="q"><label>Vendor Name<span class="req">*</span></label>
       <div class="acwrap">
@@ -133,13 +133,12 @@
     <div class="q"><label>Amount<span class="req">*</span></label>
       <input type="text" id="amount" inputmode="decimal" placeholder="0.00"/></div>
 
-    <div class="q"><label>Entity<span class="req">*</span></label><div class="selectwrap"><select id="entity"><option value="">Choose one...</option></select></div></div>
+    <div class="q"><label>Department<span class="req">*</span></label><div class="selectwrap"><select id="dept"><option value="">Choose one...</option></select></div></div>
     <div class="q"><label>Fund<span class="req">*</span></label><div class="selectwrap locked"><select id="fund" disabled><option value="">Choose one...</option></select></div></div>
 
-    <div class="q"><label>Ledger Account/GL Code<span class="req">*</span></label><div class="selectwrap locked"><select id="gl" disabled><option value="">Choose one...</option></select></div><input type="text" id="glTxt" placeholder="Enter your answer" style="display:none"/><div class="meta" id="glMeta"></div></div>
-    <div class="q"><label>Department<span class="req">*</span></label><div class="selectwrap locked"><select id="dept" disabled><option value="">Choose one...</option></select></div><input type="text" id="deptTxt" placeholder="Enter your answer" style="display:none"/><div class="meta" id="deptMeta"></div></div>
     <div class="q"><label>Program<span class="req">*</span></label><div class="selectwrap locked"><select id="prog" disabled><option value="">Choose one...</option></select></div><input type="text" id="progTxt" placeholder="Enter your answer" style="display:none"/><div class="meta" id="progMeta"></div></div>
     <div class="q"><label>Spend Category<span class="req">*</span></label><div class="selectwrap locked"><select id="sc" disabled><option value="">Choose one...</option></select></div><input type="text" id="scTxt" placeholder="Enter your answer" style="display:none"/><div class="meta" id="scMeta"></div></div>
+    <div class="q"><label>Ledger Account/GL Code<span class="req">*</span></label><div class="selectwrap locked"><select id="gl" disabled><option value="">Choose one...</option></select></div><input type="text" id="glTxt" placeholder="Enter your answer" style="display:none"/><div class="meta" id="glMeta"></div></div>
 
     <div class="q"><label>Memo<span class="req">*</span></label><textarea id="memo" placeholder="Enter your answer"></textarea></div>
 
@@ -155,20 +154,19 @@
 
     <hr/>
     <div class="actions"><button class="submit" id="submitBtn" disabled>Submit</button><span class="msg" id="msg"></span></div>
-    <div style="text-align:right;font-size:10px;color:var(--muted);margin-top:14px;letter-spacing:.04em">v8</div>
+    <div style="text-align:right;font-size:10px;color:var(--muted);margin-top:14px;letter-spacing:.04em">v9</div>
   </div>
 </div>
 
 <script>
 const $=id=>document.getElementById(id);
 $("fy27Btn").addEventListener("click",()=>$("splash").classList.add("hide"));
-const vendor=$("vendor"),amount=$("amount"),entity=$("entity"),fund=$("fund"),gl=$("gl"),dept=$("dept"),prog=$("prog"),sc=$("sc"),memo=$("memo"),msg=$("msg");
-let CASC={},ENTITIES=[],FILES=[];
+const vendor=$("vendor"),amount=$("amount"),dept=$("dept"),fund=$("fund"),prog=$("prog"),sc=$("sc"),gl=$("gl"),memo=$("memo"),msg=$("msg");
+let CASC={},DEPTS=[],FILES=[];
 
-fetch("budget_tree.json").then(r=>r.json()).then(d=>{CASC=d.cascade;ENTITIES=d.entities;fill(entity,ENTITIES,"Choose one...");})
+fetch("budget_tree.json").then(r=>r.json()).then(d=>{CASC=d.cascade;DEPTS=d.departments||Object.keys(d.cascade);fill(dept,DEPTS,"Choose one...");})
   .catch(()=>{msg.className="msg err";msg.textContent="Could not load the budget data. Refresh to try again.";});
 
-// vendor autocomplete
 // vendor autocomplete (custom dropdown; native datalist is unreliable across browsers)
 let VENDORS=[];
 fetch("vendors.json").then(r=>r.json()).then(d=>{VENDORS=d.vendors||[];})
@@ -212,33 +210,33 @@ const FUND_LABELS={"130":"TDA Operating","131":"TDA Earned Income","132":"Always
 function fillFund(items){fund.innerHTML="";const o=document.createElement("option");o.value="";o.textContent="Choose one...";fund.appendChild(o);
   items.forEach(v=>{const op=document.createElement("option");op.value=v;op.textContent=FUND_LABELS[v]?(v+" - "+FUND_LABELS[v]):v;fund.appendChild(op);});}
 
-// cascade order: entity > fund > gl > dept > program > spend
+// cascade order: department > fund > program > spend category > gl code
 function keys(o){return o?Object.keys(o):[];}
-function reset(level){const steps=[[gl,"glMeta"],[dept,"deptMeta"],[prog,"progMeta"],[sc,"scMeta"]];
+function reset(level){const steps=[[fund,null],[prog,"progMeta"],[sc,"scMeta"],[gl,"glMeta"]];
   for(let i=level;i<steps.length;i++){const s=steps[i][0];fill(s,[],"Choose one...");lock(s,true);if(steps[i][1])$(steps[i][1]).textContent="";}}
 
-// free-text mode for funds with no budget data (e.g. 130 TDA Operating)
-const FREE=[["gl","glTxt"],["dept","deptTxt"],["prog","progTxt"],["sc","scTxt"]];
+// free-text mode for funds with no budget data (TDA Operating / 130)
+const FREE=[["prog","progTxt"],["sc","scTxt"],["gl","glTxt"]];
 let freeMode=false;
 function setFreeMode(on){freeMode=on;
   FREE.forEach(([sid,tid])=>{const s=$(sid),t=$(tid);s.closest(".selectwrap").style.display=on?"none":"";t.style.display=on?"":"none";if(on){s.value="";}else{t.value="";}});
-  ["glMeta","deptMeta","progMeta","scMeta"].forEach(id=>$(id).textContent="");}
+  ["progMeta","scMeta","glMeta"].forEach(id=>$(id).textContent="");}
 function fld(sid,tid){return freeMode?$(tid).value.trim():$(sid).value;}
 
-entity.addEventListener("change",()=>{reset(0);setFreeMode(false);const v=entity.value;
-  if(v){fillFund(keys(CASC[v]));lock(fund,false);
-    if(v==="Explore Asheville"&&CASC[v]["133"]){fund.value="133";fund.dispatchEvent(new Event("change"));}}
+dept.addEventListener("change",()=>{reset(0);setFreeMode(false);const de=dept.value;
+  if(de){const funds=keys(CASC[de]);fillFund(funds);lock(fund,false);
+    if(funds.length===1){fund.value=funds[0];fund.dispatchEvent(new Event("change"));}}
   validate();});
-fund.addEventListener("change",()=>{reset(0);const c=CASC[entity.value]?.[fund.value];
-  if(c&&Object.keys(c).length===0){setFreeMode(true);}
-  else{setFreeMode(false);if(c){const k=keys(c);fill(gl,k,"Choose one...");lock(gl,false);$("glMeta").textContent=k.length+" GL code"+(k.length>1?"s":"");}}validate();});
-gl.addEventListener("change",()=>{reset(1);const c=CASC[entity.value]?.[fund.value]?.[gl.value];
-  if(c){const k=keys(c);fill(dept,k,"Choose one...");lock(dept,false);$("deptMeta").textContent=k.length+" department"+(k.length>1?"s":"");}validate();});
-dept.addEventListener("change",()=>{reset(2);const c=CASC[entity.value]?.[fund.value]?.[gl.value]?.[dept.value];
-  if(c){const k=keys(c);fill(prog,k,"Choose one...");lock(prog,false);$("progMeta").textContent=k.length+" program"+(k.length>1?"s":"");}validate();});
-prog.addEventListener("change",()=>{reset(3);const c=CASC[entity.value]?.[fund.value]?.[gl.value]?.[dept.value]?.[prog.value];
-  if(c){const k=keys(c);fill(sc,k,"Choose one...");lock(sc,false);$("scMeta").textContent=k.length+" spend categor"+(k.length>1?"ies":"y");}validate();});
-sc.addEventListener("change",validate);
+fund.addEventListener("change",()=>{reset(1);const node=CASC[dept.value]?.[fund.value];
+  if(node&&Object.keys(node).length===0){setFreeMode(true);}
+  else{setFreeMode(false);if(node){const k=keys(node);fill(prog,k,"Choose one...");lock(prog,false);$("progMeta").textContent=k.length+" program"+(k.length>1?"s":"");}}validate();});
+prog.addEventListener("change",()=>{reset(2);const node=CASC[dept.value]?.[fund.value]?.[prog.value];
+  if(node){const k=keys(node);fill(sc,k,"Choose one...");lock(sc,false);$("scMeta").textContent=k.length+" spend categor"+(k.length>1?"ies":"y");}validate();});
+sc.addEventListener("change",()=>{reset(3);const node=CASC[dept.value]?.[fund.value]?.[prog.value]?.[sc.value];
+  if(node){const k=keys(node);fill(gl,k,"Choose one...");lock(gl,false);
+    if(k.length===1){gl.value=k[0];$("glMeta").textContent="Auto-set from spend category";}
+    else{$("glMeta").textContent=k.length+" GL codes";}}validate();});
+gl.addEventListener("change",validate);
 [amount,memo].forEach(el=>el.addEventListener("input",validate));
 FREE.forEach(([,tid])=>$(tid).addEventListener("input",validate));
 
@@ -254,17 +252,16 @@ function renderFiles(){fileList.innerHTML="";FILES.forEach((f,i)=>{const li=docu
   li.innerHTML='<span class="nm">'+f.name+'</span><span class="sz">'+fmtSize(f.size)+'</span><button class="x" title="Remove">&times;</button>';
   li.querySelector(".x").addEventListener("click",()=>{FILES.splice(i,1);renderFiles();validate();});fileList.appendChild(li);});}
 
-function complete(){return vendor.value.trim()&&amount.value.trim()&&entity.value&&fund.value&&fld("gl","glTxt")&&fld("dept","deptTxt")&&fld("prog","progTxt")&&fld("sc","scTxt")&&memo.value.trim()&&FILES.length>0;}
+function complete(){return vendor.value.trim()&&amount.value.trim()&&dept.value&&fund.value&&fld("prog","progTxt")&&fld("sc","scTxt")&&fld("gl","glTxt")&&memo.value.trim()&&FILES.length>0;}
 function validate(){$("submitBtn").disabled=!complete();msg.textContent="";msg.className="msg";}
 
 $("submitBtn").addEventListener("click",async()=>{
   const btn=$("submitBtn");btn.disabled=true;btn.textContent="Submitting...";msg.className="msg";msg.textContent="";
   const fd=new FormData();
   fd.append("vendor_name",vendor.value.trim());fd.append("amount",amount.value.trim());
-  fd.append("entity",entity.value);fd.append("fund",fund.value);
-  fd.append("gl_code",fld("gl","glTxt"));fd.append("department",fld("dept","deptTxt"));
+  fd.append("department",dept.value);fd.append("fund",fund.value);
   fd.append("program",fld("prog","progTxt"));fd.append("spend_category",fld("sc","scTxt"));
-  fd.append("memo",memo.value.trim());
+  fd.append("gl_code",fld("gl","glTxt"));fd.append("memo",memo.value.trim());
   FILES.forEach(f=>fd.append("files",f,f.name));
   try{
     const r=await fetch("api/submit",{method:"POST",body:fd});const data=await r.json();
