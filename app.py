@@ -44,6 +44,7 @@ with open(BASE / "budget_tree.json") as f:
     BUDGET = json.load(f)
 CASCADE = BUDGET["cascade"]
 ENTITY_BY_FUND = BUDGET.get("entity_by_fund", {})
+PROGRAM_CLASSID = BUDGET.get("program_classid", {})
 
 FUND_LABELS = {
     "130": "TDA Operating", "131": "TDA Earned Income", "132": "Always Asheville",
@@ -53,7 +54,7 @@ FUND_LABELS = {
 
 app = FastAPI(title="EA Invoice Submission")
 
-VERSION = "v10"
+VERSION = "v11"
 NOSTORE = {"Cache-Control": "no-store, max-age=0"}
 
 
@@ -107,6 +108,7 @@ def coded_lines(fields, leaf):
         ("Ledger Account / GL Code", fields["gl_code"]),
         ("Department", fields["department"]),
         ("Program", fields["program"]),
+        ("Program Class ID (Sage)", fields.get("classid") or "—"),
         ("Spend Category", fields["spend_category"]),
         ("Memo", fields["memo"]),
     ]
@@ -121,6 +123,7 @@ def custom_fields_for(fields, leaf):
         "vendor_name": fields["vendor_name"], "entity": fields["entity"],
         "fund": fields["fund"], "department": fields["department"],
         "program_hierarchy": leaf.get("program_hierarchy"), "program": fields["program"],
+        "classid": fields.get("classid"), "program_classid": fields.get("classid"),
         "gl_code": fields["gl_code"], "spend_category": fields["spend_category"],
     }
     for k, v in text_vals.items():
@@ -280,10 +283,11 @@ async def submit(
     files: List[UploadFile] = File(default=[]),
 ):
     entity = ENTITY_BY_FUND.get(fund, "")   # derived from fund, no longer a form field
+    classid = PROGRAM_CLASSID.get(program, "")   # Sage Class ID for the program, if known
     fields = {
         "vendor_name": vendor_name.strip(), "amount": amount.strip(), "entity": entity,
         "fund": fund, "gl_code": gl_code, "department": department, "program": program,
-        "spend_category": spend_category, "memo": memo.strip(),
+        "spend_category": spend_category, "memo": memo.strip(), "classid": classid,
     }
     for key, label in (("vendor_name", "Vendor Name"), ("amount", "Amount"), ("memo", "Memo")):
         if not fields[key]:
