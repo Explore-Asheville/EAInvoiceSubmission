@@ -69,6 +69,9 @@
   button.submit:disabled{background:#A9BBC7;cursor:not-allowed}
   .msg{font-size:13px;font-weight:600;min-height:18px}
   .msg.ok{color:var(--ok)} .msg.err{color:var(--err)} .msg a{color:var(--navy)}
+  .moneywrap{position:relative}
+  .moneywrap .cur{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px;pointer-events:none}
+  .moneywrap input{padding-left:25px}
   /* vendor autocomplete */
   .acwrap{position:relative}
   .ac{position:absolute;z-index:50;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid var(--line-strong);
@@ -131,7 +134,7 @@
       <div class="vhint hide" id="vendorHint">No match in the vendor list. Are you sure you have the vendor's official name? If you're not certain, check with the vendor. If this is a new vendor, <a href="https://exploreasheville.sharepoint.com/:w:/s/ExecOffice2/IQBeehrwNSxdQI8MacBAtE0yAcOyALGdo-BnOqD2pXe4tZY?e=qrAb9T" target="_blank" rel="noopener">download the New Vendor Form</a> and send it to them to complete. Amounts under $600 do not require a form.</div></div>
 
     <div class="q"><label>Amount<span class="req">*</span></label>
-      <input type="text" id="amount" inputmode="decimal" placeholder="0.00"/></div>
+      <div class="moneywrap"><span class="cur">$</span><input type="text" id="amount" inputmode="decimal" placeholder="0.00"/></div></div>
 
     <div class="q"><label>Department<span class="req">*</span></label><div class="selectwrap"><select id="dept"><option value="">Choose one...</option></select></div></div>
     <div class="q"><label>Fund<span class="req">*</span></label><div class="selectwrap locked"><select id="fund" disabled><option value="">Choose one...</option></select></div></div>
@@ -154,7 +157,7 @@
 
     <hr/>
     <div class="actions"><button class="submit" id="submitBtn" disabled>Submit</button><span class="msg" id="msg"></span></div>
-    <div style="text-align:right;font-size:10px;color:var(--muted);margin-top:14px;letter-spacing:.04em">v13</div>
+    <div style="text-align:right;font-size:10px;color:var(--muted);margin-top:14px;letter-spacing:.04em">v14</div>
   </div>
 </div>
 
@@ -237,7 +240,13 @@ sc.addEventListener("change",()=>{reset(3);const node=CASC[dept.value]?.[fund.va
     if(k.length===1){gl.value=k[0];$("glMeta").textContent="Auto-set from spend category";}
     else{$("glMeta").textContent=k.length+" GL codes";}}validate();});
 gl.addEventListener("change",validate);
-[amount,memo].forEach(el=>el.addEventListener("input",validate));
+[memo].forEach(el=>el.addEventListener("input",validate));
+// currency behavior for Amount: sanitize while typing, unformat on focus, format on blur
+function fmtMoney(v){const n=parseFloat(String(v).replace(/[^0-9.]/g,""));
+  return isNaN(n)?"":n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});}
+amount.addEventListener("input",()=>{amount.value=amount.value.replace(/[^0-9.,]/g,"");validate();});
+amount.addEventListener("focus",()=>{amount.value=amount.value.replace(/,/g,"");});
+amount.addEventListener("blur",()=>{const f=fmtMoney(amount.value);if(f)amount.value=f;validate();});
 FREE.forEach(([,tid])=>$(tid).addEventListener("input",validate));
 
 const drop=$("drop"),fileInput=$("fileInput"),fileList=$("fileList");
