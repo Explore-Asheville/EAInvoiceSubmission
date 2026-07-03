@@ -54,7 +54,7 @@ FUND_LABELS = {
 
 app = FastAPI(title="EA Invoice Submission")
 
-VERSION = "v11"
+VERSION = "v13"
 NOSTORE = {"Cache-Control": "no-store, max-age=0"}
 
 
@@ -176,6 +176,8 @@ def make_cover_pdf(fields, leaf) -> bytes:
 
     y = h - 1.5 * inch
     for label, value in coded_lines(fields, leaf):
+        if label == "Program Class ID (Sage)":
+            label = "CLASSID"   # terse Sage field name on the cover page
         c.setFillColorRGB(0.4, 0.4, 0.4)
         c.setFont("Helvetica-Bold", 9)
         c.drawString(0.9 * inch, y, label.upper())
