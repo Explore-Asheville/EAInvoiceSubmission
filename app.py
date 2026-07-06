@@ -45,6 +45,7 @@ with open(BASE / "budget_tree.json") as f:
 CASCADE = BUDGET["cascade"]
 ENTITY_BY_FUND = BUDGET.get("entity_by_fund", {})
 PROGRAM_CLASSID = BUDGET.get("program_classid", {})
+SPEND_CODE = BUDGET.get("spend_category_code", {})
 
 FUND_LABELS = {
     "130": "TDA Operating", "131": "TDA Earned Income", "132": "Always Asheville",
@@ -54,7 +55,7 @@ FUND_LABELS = {
 
 app = FastAPI(title="EA Invoice Submission")
 
-VERSION = "v14"
+VERSION = "v15"
 NOSTORE = {"Cache-Control": "no-store, max-age=0"}
 
 
@@ -178,6 +179,12 @@ def make_cover_pdf(fields, leaf) -> bytes:
     for label, value in coded_lines(fields, leaf):
         if label == "Program Class ID (Sage)":
             label = "CLASSID"   # terse Sage field name on the cover page
+            cid = fields.get("classid")
+            value = f"{cid} - {fields['program']}" if cid else "—"
+        elif label == "Spend Category":
+            code = SPEND_CODE.get(fields.get("spend_category", ""), "")
+            if code:
+                value = f"{code} - {value}"
         c.setFillColorRGB(0.4, 0.4, 0.4)
         c.setFont("Helvetica-Bold", 9)
         c.drawString(0.9 * inch, y, label.upper())
