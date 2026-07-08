@@ -126,6 +126,8 @@
     <h1>Invoice Submission</h1>
     <p class="lede">Explore Asheville &middot; FY27 budget coding. Choose Department and the rest narrows down to a valid coded line.</p>
 
+    <div class="q"><label>Submitted by<span class="req">*</span></label><div class="selectwrap"><select id="submitter"><option value="">Choose your name...</option></select></div></div>
+
     <div class="q"><label>Vendor Name<span class="req">*</span></label>
       <div class="acwrap">
         <input type="text" id="vendor" autocomplete="off" placeholder="Start typing the vendor name"/>
@@ -157,14 +159,14 @@
 
     <hr/>
     <div class="actions"><button class="submit" id="submitBtn" disabled>Submit</button><span class="msg" id="msg"></span></div>
-    <div style="text-align:right;font-size:10px;color:var(--muted);margin-top:14px;letter-spacing:.04em">v15</div>
+    <div style="text-align:right;font-size:10px;color:var(--muted);margin-top:14px;letter-spacing:.04em">v17</div>
   </div>
 </div>
 
 <script>
 const $=id=>document.getElementById(id);
 $("fy27Btn").addEventListener("click",()=>$("splash").classList.add("hide"));
-const vendor=$("vendor"),amount=$("amount"),dept=$("dept"),fund=$("fund"),prog=$("prog"),sc=$("sc"),gl=$("gl"),memo=$("memo"),msg=$("msg");
+const vendor=$("vendor"),amount=$("amount"),dept=$("dept"),fund=$("fund"),prog=$("prog"),sc=$("sc"),gl=$("gl"),memo=$("memo"),submitter=$("submitter"),msg=$("msg");
 let CASC={},DEPTS=[],FILES=[];
 
 fetch("budget_tree.json").then(r=>r.json()).then(d=>{CASC=d.cascade;DEPTS=d.departments||Object.keys(d.cascade);fill(dept,DEPTS,"Choose one...");})
@@ -174,6 +176,12 @@ fetch("budget_tree.json").then(r=>r.json()).then(d=>{CASC=d.cascade;DEPTS=d.depa
 let VENDORS=[];
 fetch("vendors.json").then(r=>r.json()).then(d=>{VENDORS=d.vendors||[];})
   .catch(e=>console.warn("vendor list failed to load:",e));
+
+// submitter dropdown (populates the Asana assignee)
+fetch("employees.json").then(r=>r.json()).then(d=>{
+  (d.employees||[]).forEach(e=>{const o=document.createElement("option");o.value=e.id;o.textContent=e.name;submitter.appendChild(o);});
+}).catch(e=>console.warn("employee list failed to load:",e));
+submitter.addEventListener("change",validate);
 const acBox=$("vendorAC");let acIdx=-1,acMatches=[];
 function hideAC(){acBox.classList.add("hide");acIdx=-1;}
 function renderAC(){
@@ -261,13 +269,14 @@ function renderFiles(){fileList.innerHTML="";FILES.forEach((f,i)=>{const li=docu
   li.innerHTML='<span class="nm">'+f.name+'</span><span class="sz">'+fmtSize(f.size)+'</span><button class="x" title="Remove">&times;</button>';
   li.querySelector(".x").addEventListener("click",()=>{FILES.splice(i,1);renderFiles();validate();});fileList.appendChild(li);});}
 
-function complete(){return vendor.value.trim()&&amount.value.trim()&&dept.value&&fund.value&&fld("prog","progTxt")&&fld("sc","scTxt")&&fld("gl","glTxt")&&memo.value.trim()&&FILES.length>0;}
+function complete(){return submitter.value&&vendor.value.trim()&&amount.value.trim()&&dept.value&&fund.value&&fld("prog","progTxt")&&fld("sc","scTxt")&&fld("gl","glTxt")&&memo.value.trim()&&FILES.length>0;}
 function validate(){$("submitBtn").disabled=!complete();msg.textContent="";msg.className="msg";}
 
 $("submitBtn").addEventListener("click",async()=>{
   const btn=$("submitBtn");btn.disabled=true;btn.textContent="Submitting...";msg.className="msg";msg.textContent="";
   const fd=new FormData();
   fd.append("vendor_name",vendor.value.trim());fd.append("amount",amount.value.trim());
+  fd.append("submitter_id",submitter.value);
   fd.append("department",dept.value);fd.append("fund",fund.value);
   fd.append("program",fld("prog","progTxt"));fd.append("spend_category",fld("sc","scTxt"));
   fd.append("gl_code",fld("gl","glTxt"));fd.append("memo",memo.value.trim());

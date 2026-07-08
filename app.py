@@ -55,7 +55,7 @@ FUND_LABELS = {
 
 app = FastAPI(title="EA Invoice Submission")
 
-VERSION = "v15"
+VERSION = "v17"
 NOSTORE = {"Cache-Control": "no-store, max-age=0"}
 
 
@@ -234,6 +234,11 @@ def vendors():
     return FileResponse(BASE / "vendors.json", headers=NOSTORE)
 
 
+@app.get("/employees.json")
+def employees():
+    return FileResponse(BASE / "employees.json", headers=NOSTORE)
+
+
 @app.get("/api/diag")
 async def diag():
     if not ASANA_PAT:
@@ -289,6 +294,7 @@ async def submit(
     spend_category: str = Form(...),
     gl_code: str = Form(...),
     memo: str = Form(...),
+    submitter_id: str = Form(""),
     files: List[UploadFile] = File(default=[]),
 ):
     entity = ENTITY_BY_FUND.get(fund, "")   # derived from fund, no longer a form field
@@ -369,20 +375,25 @@ async def submit(
             except httpx.HTTPError:
                 pass
 
-        # set custom fields (e.g. Vendor Name) after the task is in the project/section
+        # set custom fields (e.g. Vendor Name) and assignee after the task is in the project/section
         field_warning = None
         cf = custom_fields_for(fields, leaf)
-        if cf and task_gid:
+        patch_data = {}
+        if cf:
+            patch_data["custom_fields"] = cf
+        if submitter_id.strip():
+            patch_data["assignee"] = submitter_id.strip()
+        if patch_data and task_gid:
             try:
                 cfr = await client.put(f"{ASANA_API}/tasks/{task_gid}",
                     headers={**auth, "Content-Type": "application/json"},
-                    json={"data": {"custom_fields": cf}})
+                    json={"data": patch_data})
                 if cfr.status_code >= 400:
                     field_warning = cfr.json().get("errors", [{}])[0].get("message", cfr.text)
-                    print(f"[submit] custom field write failed ({VERSION}): {field_warning} | cf={cf}", flush=True)
+                    print(f"[submit] task update failed ({VERSION}): {field_warning} | data={patch_data}", flush=True)
             except httpx.HTTPError as exc:
                 field_warning = str(exc)
-                print(f"[submit] custom field write error ({VERSION}): {exc}", flush=True)
+                print(f"[submit] task update error ({VERSION}): {exc}", flush=True)
         elif not ASANA_FIELD_MAP:
             print(f"[submit] note ({VERSION}): ASANA_FIELD_MAP not set; custom fields not written.", flush=True)
 
