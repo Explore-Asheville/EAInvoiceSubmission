@@ -55,7 +55,7 @@ FUND_LABELS = {
 
 app = FastAPI(title="EA Invoice Submission")
 
-VERSION = "v17"
+VERSION = "v18"
 NOSTORE = {"Cache-Control": "no-store, max-age=0"}
 
 
