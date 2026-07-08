@@ -47,6 +47,12 @@ ENTITY_BY_FUND = BUDGET.get("entity_by_fund", {})
 PROGRAM_CLASSID = BUDGET.get("program_classid", {})
 SPEND_CODE = BUDGET.get("spend_category_code", {})
 
+try:
+    with open(BASE / "employees.json") as f:
+        EMPLOYEE_NAME = {e["id"]: e["name"] for e in json.load(f).get("employees", [])}
+except (OSError, json.JSONDecodeError, KeyError):
+    EMPLOYEE_NAME = {}
+
 FUND_LABELS = {
     "130": "TDA Operating", "131": "TDA Earned Income", "132": "Always Asheville",
     "133": "EA Operating", "320": "Tourism Product Development",
@@ -55,8 +61,12 @@ FUND_LABELS = {
 
 app = FastAPI(title="EA Invoice Submission")
 
-VERSION = "v18"
+VERSION = "v20"
 NOSTORE = {"Cache-Control": "no-store, max-age=0"}
+# The processed-invoice assignee is always the same person (Cristina Fernandez).
+DEFAULT_ASSIGNEE = os.environ.get("ASANA_DEFAULT_ASSIGNEE", "1208571713053177")
+# The "Submitted BY" people custom field on the FY27 Invoices project.
+SUBMITTED_BY_FIELD = os.environ.get("ASANA_SUBMITTED_BY_GID", "1216387110405513")
 
 
 def lookup(department, fund, program, spend_category, gl_code):
@@ -112,6 +122,7 @@ def coded_lines(fields, leaf):
         ("Program Class ID (Sage)", fields.get("classid") or "—"),
         ("Spend Category", fields["spend_category"]),
         ("Memo", fields["memo"]),
+        ("Submitted by", fields.get("submitter") or "—"),
     ]
 
 
@@ -299,10 +310,12 @@ async def submit(
 ):
     entity = ENTITY_BY_FUND.get(fund, "")   # derived from fund, no longer a form field
     classid = PROGRAM_CLASSID.get(program, "")   # Sage Class ID for the program, if known
+    submitter_name = EMPLOYEE_NAME.get(submitter_id.strip(), "")   # for the notes failsafe
     fields = {
         "vendor_name": vendor_name.strip(), "amount": amount.strip(), "entity": entity,
         "fund": fund, "gl_code": gl_code, "department": department, "program": program,
         "spend_category": spend_category, "memo": memo.strip(), "classid": classid,
+        "submitter": submitter_name,
     }
     for key, label in (("vendor_name", "Vendor Name"), ("amount", "Amount"), ("memo", "Memo")):
         if not fields[key]:
@@ -375,14 +388,17 @@ async def submit(
             except httpx.HTTPError:
                 pass
 
-        # set custom fields (e.g. Vendor Name) and assignee after the task is in the project/section
+        # after the task is in the project/section: set custom fields (Vendor Name, Submitted BY)
+        # and always assign to the standing processor (Cristina).
         field_warning = None
         cf = custom_fields_for(fields, leaf)
+        if submitter_id.strip() and SUBMITTED_BY_FIELD:
+            cf[SUBMITTED_BY_FIELD] = [submitter_id.strip()]   # people field: array of user GIDs
         patch_data = {}
         if cf:
             patch_data["custom_fields"] = cf
-        if submitter_id.strip():
-            patch_data["assignee"] = submitter_id.strip()
+        if DEFAULT_ASSIGNEE:
+            patch_data["assignee"] = DEFAULT_ASSIGNEE
         if patch_data and task_gid:
             try:
                 cfr = await client.put(f"{ASANA_API}/tasks/{task_gid}",
