@@ -74,7 +74,7 @@ def main():
         if k not in seen:
             seen.add(k); uniq.append(n)
     uniq.sort(key=str.lower)
-    json.dump({"vendors": uniq}, open(a.out, "w"), indent=0)
+    json.dump({"vendors": uniq}, open(a.out, "w"), indent=2, ensure_ascii=False)
     print(f"Wrote {len(uniq)} vendors to {a.out}")
 
 if __name__ == "__main__":

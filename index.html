@@ -159,7 +159,7 @@
 
     <hr/>
     <div class="actions"><button class="submit" id="submitBtn" disabled>Submit</button><span class="msg" id="msg"></span></div>
-    <div style="text-align:right;font-size:10px;color:var(--muted);margin-top:14px;letter-spacing:.04em">v20</div>
+    <div style="text-align:right;font-size:10px;color:var(--muted);margin-top:14px;letter-spacing:.04em">v22</div>
   </div>
 </div>
 
@@ -190,6 +190,8 @@ function renderAC(){
   const starts=[],contains=[];
   for(const v of VENDORS){const lv=v.toLowerCase();
     if(lv.startsWith(q))starts.push(v);else if(lv.includes(q))contains.push(v);}
+  const byName=(a,b)=>a.toLowerCase().localeCompare(b.toLowerCase());
+  starts.sort(byName);contains.sort(byName);
   acMatches=starts.concat(contains).slice(0,8);
   if(!acMatches.length){hideAC();hint.classList.remove("hide");return;}
   hint.classList.add("hide");
