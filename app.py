@@ -61,7 +61,7 @@ FUND_LABELS = {
 
 app = FastAPI(title="EA Invoice Submission")
 
-VERSION = "v24"
+VERSION = "v25"
 NOSTORE = {"Cache-Control": "no-store, max-age=0"}
 # The processed-invoice assignee is always the same person (Cristina Fernandez).
 DEFAULT_ASSIGNEE = os.environ.get("ASANA_DEFAULT_ASSIGNEE", "1208571713053177")
@@ -193,10 +193,13 @@ def make_cover_pdf(fields, leaf) -> bytes:
 
     y = h - 1.5 * inch
     for label, value in coded_lines(fields, leaf):
+        if label == "Program":
+            continue   # merged into the CLASSID line below (relabeled "Program")
         if label == "Program Class ID (Sage)":
-            label = "CLASSID"   # terse Sage field name on the cover page
+            label = "Program"   # show the Sage program (code + name) as "Program"
             cid = fields.get("classid")
-            value = f"{cid} - {fields['program']}" if cid else "—"
+            prog = fields.get("program") or "—"
+            value = f"{cid} - {prog}" if cid else prog
         elif label == "Spend Category":
             code = SPEND_CODE.get(fields.get("spend_category", ""), "")
             if code:
