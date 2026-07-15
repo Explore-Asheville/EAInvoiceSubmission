@@ -61,7 +61,7 @@ FUND_LABELS = {
 
 app = FastAPI(title="EA Invoice Submission")
 
-VERSION = "v22"
+VERSION = "v24"
 NOSTORE = {"Cache-Control": "no-store, max-age=0"}
 # The processed-invoice assignee is always the same person (Cristina Fernandez).
 DEFAULT_ASSIGNEE = os.environ.get("ASANA_DEFAULT_ASSIGNEE", "1208571713053177")
@@ -186,6 +186,11 @@ def make_cover_pdf(fields, leaf) -> bytes:
     c.setFont("Helvetica", 10)
     c.drawRightString(w - 0.9 * inch, h - 0.56 * inch, "Explore Asheville")
 
+    # fiscal-year label above the coding info
+    c.setFillColorRGB(*navy)
+    c.setFont("Helvetica-Bold", 15)
+    c.drawString(0.9 * inch, h - 1.2 * inch, "FY27")
+
     y = h - 1.5 * inch
     for label, value in coded_lines(fields, leaf):
         if label == "Program Class ID (Sage)":
@@ -306,7 +311,9 @@ async def submit(
     gl_code: str = Form(...),
     memo: str = Form(...),
     submitter_id: str = Form(""),
-    files: List[UploadFile] = File(default=[]),
+    invoice_files: List[UploadFile] = File(default=[]),
+    support_files: List[UploadFile] = File(default=[]),
+    files: List[UploadFile] = File(default=[]),   # legacy single-bucket fallback
 ):
     entity = ENTITY_BY_FUND.get(fund, "")   # derived from fund, no longer a form field
     classid = PROGRAM_CLASSID.get(program, "")   # Sage Class ID for the program, if known
@@ -336,31 +343,39 @@ async def submit(
                    "dropdowns looks right, hard-refresh the page (Cmd/Ctrl+Shift+R) and try "
                    "again, the page may have cached an older version.")
 
-    real_files = [f for f in files if f.filename]
-    if not real_files:
-        raise HTTPException(status_code=422, detail="Attach the invoice (at least one file is required).")
+    invoices = [f for f in invoice_files if f.filename] or [f for f in files if f.filename]
+    supports = [f for f in support_files if f.filename]
+    if not invoices:
+        raise HTTPException(status_code=422, detail="Attach the invoice (at least one PDF is required).")
 
-    payloads = []
-    for f in real_files:
-        content = await f.read()
-        if len(content) > MAX_FILE_MB * 1024 * 1024:
-            raise HTTPException(status_code=413, detail=f"{f.filename} is larger than {MAX_FILE_MB} MB.")
-        payloads.append((f.filename, content, f.content_type or "application/octet-stream"))
+    async def read_pdfs(uploads):
+        out = []
+        for f in uploads:
+            is_pdf = (f.content_type == "application/pdf") or f.filename.lower().endswith(".pdf")
+            if not is_pdf:
+                raise HTTPException(status_code=422, detail=f"Only PDF files are accepted. '{f.filename}' is not a PDF.")
+            content = await f.read()
+            if len(content) > MAX_FILE_MB * 1024 * 1024:
+                raise HTTPException(status_code=413, detail=f"{f.filename} is larger than {MAX_FILE_MB} MB.")
+            out.append((f.filename, content, "application/pdf"))
+        return out
+
+    invoice_payloads = await read_pdfs(invoices)
+    support_payloads = await read_pdfs(supports)
 
     if not (ASANA_PAT and ASANA_PROJECT_GID):
         raise HTTPException(status_code=503, detail="Asana is not configured on the server. Set ASANA_PAT and ASANA_PROJECT_GID.")
 
-    # stamp a coding cover page onto each PDF; leave other file types untouched
+    # prepend the coding cover page to invoice PDFs only; supporting docs (vendor forms, etc.) attach as-is
     cover = make_cover_pdf(fields, leaf)
     stamped = []
-    for filename, content, ctype in payloads:
-        is_pdf = ctype == "application/pdf" or filename.lower().endswith(".pdf")
-        if is_pdf:
-            try:
-                content = stamp_pdf(content, cover)
-            except Exception:
-                pass  # if stamping fails, attach the original untouched
+    for filename, content, ctype in invoice_payloads:
+        try:
+            content = stamp_pdf(content, cover)
+        except Exception:
+            pass  # if stamping fails, attach the original untouched
         stamped.append((filename, content, ctype))
+    stamped.extend(support_payloads)   # supporting docs, no cover sheet
 
     auth = {"Authorization": f"Bearer {ASANA_PAT}"}
     async with httpx.AsyncClient(timeout=90) as client:

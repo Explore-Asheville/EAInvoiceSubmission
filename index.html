@@ -148,18 +148,29 @@
     <div class="q"><label>Memo<span class="req">*</span></label><textarea id="memo" placeholder="Enter your answer"></textarea></div>
 
     <div class="q">
-      <label>Upload invoice and any additional documentation (new vendor forms, context documents, etc.)<span class="req">*</span></label>
-      <div class="drop" id="drop">
+      <label>Invoice (PDF)<span class="req">*</span></label>
+      <div class="drop" id="dropInv">
+        <span class="pick">Select file...</span>
+        <span class="dd">or drag and drop the invoice here</span>
+        <input type="file" id="fileInputInv" accept="application/pdf,.pdf" multiple style="display:none"/>
+      </div>
+      <ul class="files" id="fileListInv"></ul>
+    </div>
+
+    <div class="q">
+      <label>Supporting documents (PDF)</label>
+      <div class="meta" style="margin:-2px 0 8px">New vendor forms, context documents, etc. These are attached as-is, without the coding cover sheet.</div>
+      <div class="drop" id="dropSup">
         <span class="pick">Select files...</span>
         <span class="dd">or drag and drop files here</span>
-        <input type="file" id="fileInput" multiple style="display:none"/>
+        <input type="file" id="fileInputSup" accept="application/pdf,.pdf" multiple style="display:none"/>
       </div>
-      <ul class="files" id="fileList"></ul>
+      <ul class="files" id="fileListSup"></ul>
     </div>
 
     <hr/>
     <div class="actions"><button class="submit" id="submitBtn" disabled>Submit</button><span class="msg" id="msg"></span></div>
-    <div style="text-align:right;font-size:10px;color:var(--muted);margin-top:14px;letter-spacing:.04em">v22</div>
+    <div style="text-align:right;font-size:10px;color:var(--muted);margin-top:14px;letter-spacing:.04em">v24</div>
   </div>
 </div>
 
@@ -167,7 +178,7 @@
 const $=id=>document.getElementById(id);
 $("fy27Btn").addEventListener("click",()=>$("splash").classList.add("hide"));
 const vendor=$("vendor"),amount=$("amount"),dept=$("dept"),fund=$("fund"),prog=$("prog"),sc=$("sc"),gl=$("gl"),memo=$("memo"),submitter=$("submitter"),msg=$("msg");
-let CASC={},DEPTS=[],FILES=[];
+let CASC={},DEPTS=[],FILES_INV=[],FILES_SUP=[];
 
 fetch("budget_tree.json").then(r=>r.json()).then(d=>{CASC=d.cascade;DEPTS=d.departments||Object.keys(d.cascade);fill(dept,DEPTS,"Choose one...");})
   .catch(()=>{msg.className="msg err";msg.textContent="Could not load the budget data. Refresh to try again.";});
@@ -259,19 +270,27 @@ amount.addEventListener("focus",()=>{amount.value=amount.value.replace(/,/g,"");
 amount.addEventListener("blur",()=>{const f=fmtMoney(amount.value);if(f)amount.value=f;validate();});
 FREE.forEach(([,tid])=>$(tid).addEventListener("input",validate));
 
-const drop=$("drop"),fileInput=$("fileInput"),fileList=$("fileList");
-drop.addEventListener("click",()=>fileInput.click());
-drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("over");});
-drop.addEventListener("dragleave",()=>drop.classList.remove("over"));
-drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("over");addFiles(e.dataTransfer.files);});
-fileInput.addEventListener("change",()=>{addFiles(fileInput.files);fileInput.value="";});
-function addFiles(list){for(const f of list)FILES.push(f);renderFiles();validate();}
 function fmtSize(b){return b<1024?b+" B":b<1048576?(b/1024).toFixed(0)+" KB":(b/1048576).toFixed(1)+" MB";}
-function renderFiles(){fileList.innerHTML="";FILES.forEach((f,i)=>{const li=document.createElement("li");
-  li.innerHTML='<span class="nm">'+f.name+'</span><span class="sz">'+fmtSize(f.size)+'</span><button class="x" title="Remove">&times;</button>';
-  li.querySelector(".x").addEventListener("click",()=>{FILES.splice(i,1);renderFiles();validate();});fileList.appendChild(li);});}
+function isPdf(f){return f.type==="application/pdf"||f.name.toLowerCase().endsWith(".pdf");}
+function setupUpload(dropId,inputId,listId,arr){
+  const drop=$(dropId),input=$(inputId),list=$(listId);
+  drop.addEventListener("click",()=>input.click());
+  drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("over");});
+  drop.addEventListener("dragleave",()=>drop.classList.remove("over"));
+  drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("over");add(e.dataTransfer.files);});
+  input.addEventListener("change",()=>{add(input.files);input.value="";});
+  function add(files){let rejected=false;
+    for(const f of files){if(isPdf(f))arr.push(f);else rejected=true;}
+    if(rejected){msg.className="msg err";msg.textContent="Only PDF files are accepted.";}
+    render();validate();}
+  function render(){list.innerHTML="";arr.forEach((f,i)=>{const li=document.createElement("li");
+    li.innerHTML='<span class="nm">'+f.name+'</span><span class="sz">'+fmtSize(f.size)+'</span><button class="x" title="Remove">&times;</button>';
+    li.querySelector(".x").addEventListener("click",()=>{arr.splice(i,1);render();validate();});list.appendChild(li);});}
+}
+setupUpload("dropInv","fileInputInv","fileListInv",FILES_INV);
+setupUpload("dropSup","fileInputSup","fileListSup",FILES_SUP);
 
-function complete(){return submitter.value&&vendor.value.trim()&&amount.value.trim()&&dept.value&&fund.value&&fld("prog","progTxt")&&fld("sc","scTxt")&&fld("gl","glTxt")&&memo.value.trim()&&FILES.length>0;}
+function complete(){return submitter.value&&vendor.value.trim()&&amount.value.trim()&&dept.value&&fund.value&&fld("prog","progTxt")&&fld("sc","scTxt")&&fld("gl","glTxt")&&memo.value.trim()&&FILES_INV.length>0;}
 function validate(){$("submitBtn").disabled=!complete();msg.textContent="";msg.className="msg";}
 
 $("submitBtn").addEventListener("click",async()=>{
@@ -282,7 +301,8 @@ $("submitBtn").addEventListener("click",async()=>{
   fd.append("department",dept.value);fd.append("fund",fund.value);
   fd.append("program",fld("prog","progTxt"));fd.append("spend_category",fld("sc","scTxt"));
   fd.append("gl_code",fld("gl","glTxt"));fd.append("memo",memo.value.trim());
-  FILES.forEach(f=>fd.append("files",f,f.name));
+  FILES_INV.forEach(f=>fd.append("invoice_files",f,f.name));
+  FILES_SUP.forEach(f=>fd.append("support_files",f,f.name));
   try{
     const r=await fetch("api/submit",{method:"POST",body:fd});const data=await r.json();
     if(r.ok){msg.className="msg ok";
