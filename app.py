@@ -61,12 +61,16 @@ FUND_LABELS = {
 
 app = FastAPI(title="EA Invoice Submission")
 
-VERSION = "v25"
+VERSION = "v26"
 NOSTORE = {"Cache-Control": "no-store, max-age=0"}
 # The processed-invoice assignee is always the same person (Cristina Fernandez).
 DEFAULT_ASSIGNEE = os.environ.get("ASANA_DEFAULT_ASSIGNEE", "1208571713053177")
 # The "Submitted BY" people custom field on the FY27 Invoices project.
 SUBMITTED_BY_FIELD = os.environ.get("ASANA_SUBMITTED_BY_GID", "1216387110405513")
+# Notifications follow task collaborators. The token owner is auto-added as a collaborator
+# on every task it creates; we remove them so the submitter (not the service account) is
+# notified. Cached from /users/me on first use, or set ASANA_NOTIFY_SUPPRESS_GID to override.
+_TOKEN_OWNER = os.environ.get("ASANA_NOTIFY_SUPPRESS_GID", "") or None
 
 
 def lookup(department, fund, program, spend_category, gl_code):
@@ -287,6 +291,18 @@ async def diag():
     return out
 
 
+async def token_owner_gid(client, auth):
+    """GID of the user owning the PAT (auto-collaborator on created tasks). Cached."""
+    global _TOKEN_OWNER
+    if _TOKEN_OWNER is None:
+        try:
+            r = await client.get(f"{ASANA_API}/users/me", headers=auth)
+            _TOKEN_OWNER = r.json().get("data", {}).get("gid", "") if r.status_code < 400 else ""
+        except httpx.HTTPError:
+            _TOKEN_OWNER = ""
+    return _TOKEN_OWNER
+
+
 @app.get("/healthz")
 def healthz():
     # cascade signature: first dept/fund and its next-level keys, to confirm data order/version
@@ -442,6 +458,23 @@ async def submit(
                     failed.append(filename)
             except httpx.HTTPError:
                 failed.append(filename)
+
+        # Route notifications to the submitter instead of the service account (token owner).
+        # Done last so any auto-follow from the actions above is also corrected.
+        sub = submitter_id.strip()
+        if task_gid:
+            try:
+                if sub:
+                    await client.post(f"{ASANA_API}/tasks/{task_gid}/addFollowers",
+                        headers={**auth, "Content-Type": "application/json"},
+                        json={"data": {"followers": [sub]}})
+                owner = await token_owner_gid(client, auth)
+                if owner and owner != sub:
+                    await client.post(f"{ASANA_API}/tasks/{task_gid}/removeFollowers",
+                        headers={**auth, "Content-Type": "application/json"},
+                        json={"data": {"followers": [owner]}})
+            except httpx.HTTPError as exc:
+                print(f"[submit] follower routing error ({VERSION}): {exc}", flush=True)
 
     return JSONResponse({"ok": True, "task_gid": task_gid, "permalink": task.get("permalink_url"),
                          "name": task.get("name"), "attached": attached, "failed": failed,
