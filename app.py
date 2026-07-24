@@ -61,7 +61,7 @@ FUND_LABELS = {
 
 app = FastAPI(title="EA Invoice Submission")
 
-VERSION = "v27"
+VERSION = "v28"
 NOSTORE = {"Cache-Control": "no-store, max-age=0"}
 # The processed-invoice assignee is always the same person (Cristina Fernandez).
 DEFAULT_ASSIGNEE = os.environ.get("ASANA_DEFAULT_ASSIGNEE", "1208571713053177")
